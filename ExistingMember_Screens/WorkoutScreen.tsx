@@ -16,11 +16,36 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
+// ─── LOCAL EXERCISE IMAGES ───────────────────────────────────────────────────
+const LOCAL_IMAGES = {
+    // Mon
+    chestFly: require('../assets/images/chest_fly.png'),
+    chestPress: require('../assets/images/chest_press.png'),
+    tricepPushdown: require('../assets/images/tricep_pushdown.png'),
+    // Tue
+    latPulldown: require('../assets/images/lat_pulldown.png'),
+    seatedCableRow: require('../assets/images/seated_cable_row.png'),
+    bicepCurl: require('../assets/images/bicep_curl.png'),
+    // Wed
+    shoulderPress: require('../assets/images/shoulder_press.png'),
+    cableLateralRaise: require('../assets/images/cable_lateral_raise.png'),
+    crunchMachine: require('../assets/images/crunch_machine.png'),
+    // Thu
+    legPress: require('../assets/images/leg_press.png'),
+    legExtension: require('../assets/images/leg_extension.png'),
+    legCurl: require('../assets/images/leg_curl.png'),
+    // Sat
+    backExtension: require('../assets/images/back_extension.png'),
+    calfRaise: require('../assets/images/calf_raise.png'),
+};
+
 interface Exercise {
     name: string;
     machine: string;
     setsReps: string;
-    imageUri: string;
+    // imageUri is now optional — use imageSource (local require) when available
+    imageUri?: string;
+    imageSource?: ReturnType<typeof require>;
     instructions: string[];
 }
 
@@ -57,7 +82,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Machine Chest Fly',
                 machine: 'Pec Deck / Butterfly Machine',
                 setsReps: '3 Sets x 12-15 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01731301.png',
+                imageSource: LOCAL_IMAGES.chestFly,          // ← local image
                 instructions: [
                     'Adjust seat height so handles sit level with your mid-chest.',
                     'Keep your spine completely flat against the pad and plant your feet firmly.',
@@ -69,7 +94,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Chest Press Machine',
                 machine: 'Seated Chest Press',
                 setsReps: '4 Sets x 10 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/02221301.png',
+                imageSource: LOCAL_IMAGES.chestPress,        // ← local image
                 instructions: [
                     'Position your grip comfortably on the handles just wider than shoulder width.',
                     'Drive the weight upward explosively along the pre-guided machine track.',
@@ -81,7 +106,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Tricep Pushdown',
                 machine: 'Cable Tower Station',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/02001301.png',
+                imageSource: LOCAL_IMAGES.tricepPushdown,    // ← local image
                 instructions: [
                     'Attach a bar or rope setup to the top pulley configuration.',
                     'Face toward the stack, pinning your elbow units close to your torso frame.',
@@ -101,7 +126,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Wide-Grip Lat Pulldown',
                 machine: 'Lat Pulldown Station',
                 setsReps: '4 Sets x 10-12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01501301.png',
+                imageSource: LOCAL_IMAGES.latPulldown,       // ← local image
                 instructions: [
                     'Lock your knees firmly beneath the padded stabilization roller rods.',
                     'Grasp the long bar outside shoulder width with a solid overhand grip.',
@@ -113,7 +138,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Seated Cable Row',
                 machine: 'Low Pulley Row Unit',
                 setsReps: '3 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01801301.png',
+                imageSource: LOCAL_IMAGES.seatedCableRow,    // ← local image
                 instructions: [
                     'Place feet on structural footplates, keeping a soft bend in your knee line.',
                     'Pull the handles back towards your navel while keeping your spine straight.',
@@ -125,7 +150,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Bicep Curls',
                 machine: 'Isolated Cable Station',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/02101301.png',
+                imageSource: LOCAL_IMAGES.bicepCurl,         // ← local image
                 instructions: [
                     'Grasp the handle setup with an underhand grip at hip height.',
                     'Pin your elbow units close to your torso frame throughout the movement.',
@@ -145,7 +170,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Machine Shoulder Press',
                 machine: 'Overhead Press Machine',
                 setsReps: '3 Sets x 10 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01651301.png',
+                imageSource: LOCAL_IMAGES.shoulderPress,
                 instructions: [
                     'Set seat base height so the handle grips align at lower jaw level.',
                     'Keep your core tight and head straight against the back pad structure.',
@@ -157,7 +182,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Cable Lateral Raise',
                 machine: 'Low Cable Pulley Unit',
                 setsReps: '4 Sets x 15 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01951301.png',
+                imageSource: LOCAL_IMAGES.cableLateralRaise,
                 instructions: [
                     'Stand sideways to the machine cable track, gripping handle across your body line.',
                     'Raise your arm outward laterally to the side in a wide mechanical arc.',
@@ -169,7 +194,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Crunch Machine Focus',
                 machine: 'Abdominal Isolation Machine',
                 setsReps: '3 Sets x 15 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/03051301.png',
+                imageSource: LOCAL_IMAGES.crunchMachine,
                 instructions: [
                     'Select a light to moderate resistance weight setting.',
                     'Position your upper back safely against the padded roller lever setup.',
@@ -189,7 +214,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Leg Press Sled',
                 machine: 'Linear Leg Press Machine',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01051301.png',
+                imageSource: LOCAL_IMAGES.legPress,
                 instructions: [
                     'Place feet shoulder-width apart in the center of the sled matrix plate.',
                     'Release safety latches cleanly while holding weight up firmly.',
@@ -201,7 +226,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Seated Leg Extension',
                 machine: 'Quadriceps Isolation Machine',
                 setsReps: '3 Sets x 15 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01151301.png',
+                imageSource: LOCAL_IMAGES.legExtension,
                 instructions: [
                     'Align your knee joint directly with the machine structural rotation axis.',
                     'Hook your feet comfortably beneath the padded lower cylindrical roller bar.',
@@ -213,7 +238,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Leg Curl Machine',
                 machine: 'Hamstring Isolation Unit',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01251301.png',
+                imageSource: LOCAL_IMAGES.legCurl,
                 instructions: [
                     'Sit or lie prone on the bench matrix, aligning knees with the machine pivot.',
                     'Position lower pad roller directly over your lower Achilles tendon line.',
@@ -233,7 +258,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Cable Bicep Curl',
                 machine: 'Dual Cable Straight Bar Unit',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/02101301.png',
+                imageSource: LOCAL_IMAGES.bicepCurl,         // ← reuse local image
                 instructions: [
                     'Grasp the straight metal cable bar attachment with an underhand grip.',
                     'Keep your elbows pinned into your side ribs to avoid mechanical swinging.',
@@ -245,7 +270,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Tricep Pushdown',
                 machine: 'Cable Station Straight Bar',
                 setsReps: '4 Sets x 12 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/02001301.png',
+                imageSource: LOCAL_IMAGES.tricepPushdown,    // ← reuse local image
                 instructions: [
                     'Grasp the bar handle setup with an overhand grip at chest height.',
                     'Pin your elbow units close to your torso frame throughout the movement.',
@@ -265,7 +290,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Back Extension',
                 machine: 'Hyper-Extension 45° Bench',
                 setsReps: '3 Sets x 15 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/03151301.png',
+                imageSource: LOCAL_IMAGES.backExtension,
                 instructions: [
                     'Lock your ankles behind the roller pads and rest your hips flat on the pads.',
                     'Hinge forward from your hips smoothly, lowering your upper body.',
@@ -277,7 +302,7 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
                 name: 'Seated Calf Raise',
                 machine: 'Calf Press Unit',
                 setsReps: '4 Sets x 20 Reps',
-                imageUri: 'https://raw.githubusercontent.com/manikandanraji/gym-workout-images/master/png/01351301.png',
+                imageSource: LOCAL_IMAGES.calfRaise,
                 instructions: [
                     'Place your toes on the bottom edge of the footplate with your heels hanging off.',
                     'Drop your heels down fully to achieve a deep calf muscle stretch.',
@@ -295,6 +320,13 @@ const WORKOUT_PLANS: Record<DayKey, WorkoutDayPlan> = {
         exercises: []
     }
 };
+
+// ─── HELPER: resolve image source (local require OR remote uri) ───────────────
+function getImageSource(ex: Exercise) {
+    if (ex.imageSource) return ex.imageSource;
+    if (ex.imageUri) return { uri: ex.imageUri };
+    return undefined;
+}
 
 export default function WorkoutScreen() {
     const insets = useSafeAreaInsets();
@@ -343,7 +375,6 @@ export default function WorkoutScreen() {
                             inputRange: [0, 1],
                             outputRange: [0.5, 1]
                         });
-
                         return (
                             <Animated.View key={d.key} style={{ transform: [{ scale: scaleIn }] }}>
                                 <TouchableOpacity
@@ -365,6 +396,7 @@ export default function WorkoutScreen() {
 
             {/* DYNAMIC CARD SCROLL LIST */}
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
+
                 {/* FOCUS HEADLINE BADGE */}
                 <View style={[styles.focusHeadlineBox, { backgroundColor: currentPlan.bgTheme, borderLeftColor: currentPlan.accent }]}>
                     <Text style={styles.focusIcon}>{currentPlan.icon}</Text>
@@ -391,7 +423,7 @@ export default function WorkoutScreen() {
                             >
                                 <View style={styles.imageCardContainer}>
                                     <Image
-                                        source={{ uri: item.imageUri }}
+                                        source={getImageSource(item)!}
                                         style={styles.exCardImage}
                                         resizeMode="contain"
                                     />
@@ -436,7 +468,7 @@ export default function WorkoutScreen() {
 
                                 <View style={styles.modalHeroImageContainer}>
                                     <Image
-                                        source={{ uri: activeExercise.imageUri }}
+                                        source={getImageSource(activeExercise)!}
                                         style={styles.modalHeroImage}
                                         resizeMode="contain"
                                     />

@@ -83,7 +83,16 @@ const DAILY_DATA: Record<DayKey, { focus: string; accent: string; quote: string;
   },
 };
 
-export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
+// ─────────────────────────────────────────────────────────────
+// PROPS
+// ─────────────────────────────────────────────────────────────
+
+type HomeScreenProps = {
+  onLogout: () => void;
+  onUpgradePlan: () => void;
+};
+
+export default function HomeScreen({ onLogout, onUpgradePlan }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
 
   const [selectedDay, setSelectedDay] = useState<DayKey>(naturalTodayKey);
@@ -106,13 +115,14 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
   const slideRoadmap = useRef(new Animated.Value(30)).current;
   const fadeBanner = useRef(new Animated.Value(0)).current;
   const slideBanner = useRef(new Animated.Value(30)).current;
+  const fadeUpgrade = useRef(new Animated.Value(0)).current;
+  const slideUpgrade = useRef(new Animated.Value(30)).current;
 
   const fadeCalendar = useRef(new Animated.Value(0)).current;
   const slideCalendar = useRef(new Animated.Value(15)).current;
   const fadeQuote = useRef(new Animated.Value(0)).current;
   const slideQuote = useRef(new Animated.Value(20)).current;
 
-  // Layout Animation Timers
   const calendarExpandAnim = useRef(new Animated.Value(0)).current;
   const chipSelectionScale = useRef(new Animated.Value(1)).current;
   const statScales = useRef([0, 1, 2].map(() => new Animated.Value(0.7))).current;
@@ -120,6 +130,10 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
   const badgePulse = useRef(new Animated.Value(1)).current;
   const emojiFloat = useRef(new Animated.Value(0)).current;
   const quotePulse = useRef(new Animated.Value(1)).current;
+
+  // Upgrade card shimmer
+  const upgradeShimmer = useRef(new Animated.Value(0)).current;
+  const upgradeScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.stagger(90, [
@@ -150,9 +164,14 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
         Animated.timing(fadeBanner, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.spring(slideBanner, { toValue: 0, speed: 14, bounciness: 8, useNativeDriver: true }),
       ]),
+      // Upgrade card entrance — last in stagger
+      Animated.parallel([
+        Animated.timing(fadeUpgrade, { toValue: 1, duration: 420, useNativeDriver: true }),
+        Animated.spring(slideUpgrade, { toValue: 0, speed: 14, bounciness: 10, useNativeDriver: true }),
+      ]),
     ]).start();
 
-    // Loops setup
+    // Loops
     Animated.loop(
       Animated.sequence([
         Animated.timing(badgePulse, { toValue: 1.12, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
@@ -171,6 +190,14 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
       Animated.sequence([
         Animated.timing(quotePulse, { toValue: 1.015, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
         Animated.timing(quotePulse, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Upgrade card shimmer loop
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(upgradeShimmer, { toValue: 1, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        Animated.timing(upgradeShimmer, { toValue: 0, duration: 1600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       ])
     ).start();
   }, []);
@@ -192,7 +219,7 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
       toValue,
       tension: 38,
       friction: 8,
-      useNativeDriver: false, // Required false for dynamic flex layout box adjustments
+      useNativeDriver: false,
     }).start();
     setIsExpanded(!isExpanded);
   };
@@ -201,7 +228,24 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
     setTasks(prev => prev.map(t => t.id === id ? { ...t, done: !t.done } : t));
   };
 
-  // Intermediate interpolation maps for structural drawer metrics
+  const handleUpgradePressIn = () => {
+    Animated.spring(upgradeScale, {
+      toValue: 0.97,
+      speed: 30,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handleUpgradePressOut = () => {
+    Animated.spring(upgradeScale, {
+      toValue: 1,
+      speed: 22,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+  };
+
   const drawerHeight = calendarExpandAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 205],
@@ -215,6 +259,12 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
   const chevronRotate = calendarExpandAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg'],
+  });
+
+  // Shimmer interpolation for upgrade card border glow
+  const shimmerOpacity = upgradeShimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.6, 1],
   });
 
   const currentMonthDays = Array.from({ length: 31 }, (_, i) => i + 1);
@@ -240,16 +290,14 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </View>
         </Animated.View>
 
-        {/* ── DAILY FOCUS MINDSET QUOTE ─────────────────────────────────── */}
+        {/* ── DAILY FOCUS MINDSET QUOTE ─────────────────────────── */}
         <Animated.View style={[styles.quoteBox, { opacity: fadeQuote, transform: [{ translateY: slideQuote }, { scale: quotePulse }] }]}>
           <Text style={styles.quoteTitleText}>DAILY FOCUS MINDSET</Text>
           <Text style={styles.quoteBodyText}>{dayConfig.quote}</Text>
         </Animated.View>
 
-        {/* ── BOTH CHIPS & FULL MONTH COMBINED EXPANDABLE CALENDAR ──────── */}
+        {/* ── CALENDAR ──────────────────────────────────────────── */}
         <Animated.View style={[styles.calendarCard, { opacity: fadeCalendar, transform: [{ translateY: slideCalendar }] }]}>
-
-          {/* Header Card (Triggers Drawer) */}
           <TouchableOpacity
             style={styles.calendarHeaderRow}
             activeOpacity={0.7}
@@ -264,7 +312,6 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
             </Animated.View>
           </TouchableOpacity>
 
-          {/* Persistent Weekly Chips Layout (Always Visible) */}
           <View style={styles.calendarRowContainer}>
             {DAYS.map((day) => {
               const isSelectedDay = day.key === selectedDay;
@@ -287,14 +334,15 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
                   ]}>
                     {day.short}
                   </Animated.Text>
-                  <Text style={[styles.calendarLabelText, isSelectedDay && styles.calendarLabelTextOn]}>{day.label}</Text>
+                  <Text style={[styles.calendarLabelText, isSelectedDay && styles.calendarLabelTextOn]}>
+                    {day.label}
+                  </Text>
                   {isSelectedDay && <View style={styles.calendarActiveCoreDot} />}
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          {/* Expandable Lower Monthly Grid Content */}
           <Animated.View style={[styles.drawerContainer, { height: drawerHeight, opacity: drawerOpacity }]}>
             <View style={styles.monthGridDivider} />
             <View style={styles.weeksHeaderRow}>
@@ -303,14 +351,12 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
               ))}
             </View>
             <View style={styles.monthGridDaysMatrix}>
-              {/* Padding elements corresponding to calendar week configurations offsets */}
               <View style={{ width: '13.5%', height: 26 }} />
               <View style={{ width: '13.5%', height: 26 }} />
               <View style={{ width: '13.5%', height: 26 }} />
               <View style={{ width: '13.5%', height: 26 }} />
-
               {currentMonthDays.map((dateNum) => {
-                const checkToday = dateNum === 20; // Matches system clock context parameter metrics
+                const checkToday = dateNum === 20;
                 return (
                   <View
                     key={dateNum}
@@ -326,7 +372,7 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </Animated.View>
         </Animated.View>
 
-        {/* ── TODAY\'S TARGET BODY FOCUS BLOCK ─────────────────────────── */}
+        {/* ── BODY FOCUS CARD ───────────────────────────────────── */}
         <Animated.View style={[styles.bodyFocusCard, { opacity: fadeQuote, borderLeftColor: dayConfig.accent }]}>
           <View style={styles.bodyFocusIconLayout}>
             <Text style={styles.bodyFocusIconEmoji}>🏋️‍♂️</Text>
@@ -340,20 +386,18 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </View>
         </Animated.View>
 
-        {/* ── QUICK STATS GRID WITH DYNAMIC CALORIE INTENSITY ─────────── */}
+        {/* ── STATS GRID ────────────────────────────────────────── */}
         <Animated.View style={[styles.statsGrid, { opacity: fadeStats, transform: [{ translateY: slideStats }] }]}>
           <Animated.View style={[styles.statCard, { transform: [{ scale: statScales[0] }] }]}>
             <Text style={styles.statIcon}>🏋️</Text>
             <Text style={styles.statValue}>3 Completed</Text>
             <Text style={styles.statLabel}>Workouts</Text>
           </Animated.View>
-
           <Animated.View style={[styles.statCard, { transform: [{ scale: statScales[1] }] }]}>
             <Text style={styles.statIcon}>📅</Text>
             <Text style={styles.statValue}>5 Days</Text>
             <Text style={styles.statLabel}>Streak</Text>
           </Animated.View>
-
           <Animated.View style={[styles.statCard, { transform: [{ scale: statScales[2] }] }]}>
             <Text style={styles.statIcon}>🔥</Text>
             <Text style={[styles.statValue, { color: '#dc2626' }]}>{dayConfig.burnTarget}</Text>
@@ -361,7 +405,55 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </Animated.View>
         </Animated.View>
 
-        {/* ── TODAY\'S ACTIVE SESSION ROADMAP (CHECKLIST) ── */}
+        {/* ── UPGRADE PLAN CARD ─────────────────────────────────── */}
+        <Animated.View
+          style={[
+            styles.upgradeSection,
+            {
+              opacity: fadeUpgrade,
+              transform: [{ translateY: slideUpgrade }],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={onUpgradePlan}
+            onPressIn={handleUpgradePressIn}
+            onPressOut={handleUpgradePressOut}
+          >
+            <Animated.View
+              style={[
+                styles.upgradeCard,
+                {
+                  transform: [{ scale: upgradeScale }],
+                  opacity: shimmerOpacity,
+                },
+              ]}
+            >
+              {/* Left accent strip */}
+              <View style={styles.upgradeAccentStrip} />
+
+              <View style={styles.upgradeCardInner}>
+                <View style={styles.upgradeIconBox}>
+                  <Text style={styles.upgradeIcon}>⭐</Text>
+                </View>
+                <View style={styles.upgradeTextBlock}>
+                  <Text style={styles.upgradeBadge}>MEMBERSHIP</Text>
+                  <Text style={styles.upgradeTitle}>Upgrade Your Plan</Text>
+                  <Text style={styles.upgradeSub}>
+                    You're on <Text style={{ fontWeight: '800', color: C.primary }}>Seedling</Text>.
+                    Unlock 24/7 access, coaching & more.
+                  </Text>
+                </View>
+                <View style={styles.upgradeArrowBox}>
+                  <Text style={styles.upgradeArrow}>→</Text>
+                </View>
+              </View>
+            </Animated.View>
+          </TouchableOpacity>
+        </Animated.View>
+
+        {/* ── ROADMAP CHECKLIST ─────────────────────────────────── */}
         <Animated.View style={[styles.section, { opacity: fadeRoadmap, transform: [{ translateY: slideRoadmap }] }]}>
           <Text style={styles.sectionTitle}>Today's Session Roadmap</Text>
           <View style={styles.roadmapContainer}>
@@ -386,7 +478,7 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </View>
         </Animated.View>
 
-        {/* ── NUTRITION FUEL STRATEGY MODULE ─────────────────────────── */}
+        {/* ── NUTRITION ADVICE ──────────────────────────────────── */}
         <Animated.View style={[styles.section, { opacity: fadeBanner }]}>
           <View style={[styles.announcementCard, { borderLeftWidth: 4, borderLeftColor: '#d97706', backgroundColor: '#fffdfa' }]}>
             <Text style={[styles.announcementBadge, { color: '#d97706' }]}>🍏 NUTRITION PACING ADVICE</Text>
@@ -395,7 +487,7 @@ export default function HomeScreen({ onLogout }: { onLogout: () => void }) {
           </View>
         </Animated.View>
 
-        {/* ── Announcement Banner ───────────────────────────────── */}
+        {/* ── ANNOUNCEMENT BANNER ───────────────────────────────── */}
         <Animated.View style={[styles.section, styles.sectionLast, { opacity: fadeBanner, transform: [{ translateY: slideBanner }] }]}>
           <View style={styles.announcementCard}>
             <View style={styles.announcementBadgeRow}>
@@ -423,19 +515,18 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 28, fontWeight: '900', color: C.primary, letterSpacing: -0.5, lineHeight: 34 },
   heroEmoji: { fontSize: 26, marginBottom: 2 },
 
-  // Quote Box Layout
+  // Quote
   quoteBox: { marginHorizontal: 24, marginTop: 8, marginBottom: 12, padding: 16, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 6, elevation: 1 },
   quoteTitleText: { fontSize: 9, fontWeight: '800', color: '#64748b', letterSpacing: 1.2, marginBottom: 6 },
   quoteBodyText: { fontSize: 14, fontWeight: '600', color: '#334155', fontStyle: 'italic', lineHeight: 20 },
 
-  // Combined Persistent Chips + Monthly Expansion Grid Style Properties
+  // Calendar
   calendarCard: { backgroundColor: '#fff', marginHorizontal: 24, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.02, shadowRadius: 6, elevation: 1, overflow: 'hidden' },
   calendarHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   cardHeaderTitle: { fontSize: 13, fontWeight: '900', color: '#1e293b', letterSpacing: 0.1 },
   calendarSubhead: { fontSize: 11, color: '#94a3b8', fontWeight: '600', marginTop: 1 },
   chevronContainer: { width: 24, height: 24, justifyContent: 'center', alignItems: 'center' },
   chevronText: { fontSize: 10, color: '#94a3b8' },
-
   calendarRowContainer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   calendarDayChip: { alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 12, borderWidth: 1, borderColor: '#f1f5f9', backgroundColor: '#f8fafc', minWidth: (SCREEN_WIDTH - 84) / 7 },
   naturalTodayBorder: { borderColor: '#cbd5e1', borderWidth: 1.5 },
@@ -444,8 +535,6 @@ const styles = StyleSheet.create({
   calendarLabelText: { fontSize: 9, color: '#64748b', fontWeight: '600', marginTop: 2 },
   calendarLabelTextOn: { color: 'rgba(255,255,255,0.85)' },
   calendarActiveCoreDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: '#fff', marginTop: 4 },
-
-  // Month Grid Container Elements
   drawerContainer: { overflow: 'hidden' },
   monthGridDivider: { height: 1, backgroundColor: '#f1f5f9', marginTop: 14, marginBottom: 12 },
   weeksHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 6, marginBottom: 8 },
@@ -454,7 +543,7 @@ const styles = StyleSheet.create({
   monthDateCell: { width: '13.5%', height: 26, justifyContent: 'center', alignItems: 'center' },
   monthDateCellText: { fontSize: 11, fontWeight: '700', color: '#64748b' },
 
-  // Body Focus Tracker
+  // Body Focus
   bodyFocusCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', marginHorizontal: 24, padding: 14, borderRadius: 16, borderLeftWidth: 4, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.03, shadowRadius: 6, elevation: 1, gap: 12 },
   bodyFocusIconLayout: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f8fafc', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
   bodyFocusIconEmoji: { fontSize: 20 },
@@ -463,19 +552,93 @@ const styles = StyleSheet.create({
   statusTargetIndicator: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   statusIndicatorText: { fontSize: 11, fontWeight: '800' },
 
-  // Stats Grid Layout Configuration
+  // Stats
   statsGrid: { flexDirection: 'row', marginHorizontal: 24, gap: 8, marginBottom: 8 },
   statCard: { flex: 1, backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', padding: 12, alignItems: 'center', gap: 3, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   statIcon: { fontSize: 20 },
   statValue: { fontSize: 14, fontWeight: '900', color: '#1e293b', textAlign: 'center' },
   statLabel: { fontSize: 9, color: '#94a3b8', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
 
-  // Section Defaults Header Core Structure
+  // ── Upgrade Plan Card ──────────────────────────────────────
+  upgradeSection: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  upgradeCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(128,0,0,0.18)',
+    overflow: 'hidden',
+    flexDirection: 'row',
+    shadowColor: '#800000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  upgradeAccentStrip: {
+    width: 5,
+    backgroundColor: C.primary,
+  },
+  upgradeCardInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 12,
+  },
+  upgradeIconBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#fff0eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(128,0,0,0.12)',
+  },
+  upgradeIcon: { fontSize: 20 },
+  upgradeTextBlock: { flex: 1, gap: 3 },
+  upgradeBadge: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: C.primary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  upgradeTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#1e293b',
+  },
+  upgradeSub: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  upgradeArrowBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: C.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  upgradeArrow: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+
+  // Sections
   section: { paddingHorizontal: 24, paddingTop: 16, gap: 12 },
   sectionLast: { paddingBottom: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '900', color: C.primary, letterSpacing: -0.3 },
 
-  // Roadmap Checklist Styles
+  // Roadmap
   roadmapContainer: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', padding: 12, gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   taskRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12, borderRadius: 12, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#f1f5f9' },
   taskRowDone: { backgroundColor: '#fafafa', opacity: 0.7, borderColor: '#e2e8f0' },
@@ -485,7 +648,7 @@ const styles = StyleSheet.create({
   taskLabelDone: { textDecorationLine: 'line-through', color: '#94a3b8' },
   taskMeta: { fontSize: 11, color: '#64748b', fontWeight: '600', marginTop: 2 },
 
-  // Announcement Layout Cards Elements
+  // Announcements
   announcementCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f1f5f9', padding: 16, gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.02, shadowRadius: 4, elevation: 1 },
   announcementBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badgeDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: C.primary },

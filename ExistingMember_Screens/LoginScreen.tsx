@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, styles as shared } from '../styles';
 import TopBar from '../components/TopBar';
+import ForgotPasswordScreen from './ForgotPasswordScreen';
 
 const { width, height } = Dimensions.get('window');
 
@@ -31,6 +32,9 @@ export default function LoginScreen({
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // ── Forgot password overlay state ──
+  const [showForgot, setShowForgot] = useState(false);
 
   // Entry animations
   const heroAnim = useRef(new Animated.Value(0)).current;
@@ -196,9 +200,14 @@ export default function LoginScreen({
               </TouchableOpacity>
             </Animated.View>
 
-            <TouchableOpacity style={styles.forgotLink}>
+            {/* ✅ Forgot password — opens ForgotPasswordScreen overlay */}
+            <TouchableOpacity
+              style={styles.forgotLink}
+              onPress={() => setShowForgot(true)}
+            >
               <Text style={styles.forgotText}>Forgot your password?</Text>
             </TouchableOpacity>
+
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -227,6 +236,18 @@ export default function LoginScreen({
           Signed in successfully
         </Animated.Text>
       </Animated.View>
+
+      {/* ── Forgot Password Screen Overlay ── */}
+      {showForgot && (
+        <ForgotPasswordScreen
+          onBack={() => setShowForgot(false)}
+          onSuccess={() => {
+            // Dismiss forgot screen; user can now log in with new password
+            setShowForgot(false);
+          }}
+        />
+      )}
+
     </SafeAreaView>
   );
 }

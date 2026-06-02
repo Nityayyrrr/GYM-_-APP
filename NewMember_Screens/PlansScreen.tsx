@@ -95,21 +95,16 @@ export default function PlansScreen({
     onJoin,
 }: {
     onBack: () => void;
-    onJoin: () => void;
+    // ✅ now passes the selected plan name up to App.tsx
+    onJoin: (plan: string) => void;
 }) {
     const [selectedPlan, setSelectedPlan] = useState('Forged');
     const [openFaq, setOpenFaq] = useState<number | null>(null);
-
-    // ✅ Read bottom inset for home indicator / gesture nav bar
     const insets = useSafeAreaInsets();
 
     return (
-        // ✅ edges handles notch (top) and side cutouts; bottom handled via insets
         <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-
-            {/* ✅ translucent=false prevents content drawing behind Android status bar */}
             <StatusBar style="dark" translucent={false} backgroundColor="#fff8f3" />
-
             <TopBar onBack={onBack} title="Membership Plans" />
 
             {/* Progress Indicator */}
@@ -122,11 +117,9 @@ export default function PlansScreen({
             <ScrollView
                 contentContainerStyle={[
                     styles.scrollContent,
-                    // ✅ Clears home indicator and Android gesture nav bar
                     { paddingBottom: insets.bottom + 48 },
                 ]}
                 showsVerticalScrollIndicator={false}
-                // ✅ Keeps scroll indicator inside safe area
                 scrollIndicatorInsets={{ bottom: insets.bottom }}
             >
                 {/* Header */}
@@ -255,7 +248,8 @@ export default function PlansScreen({
                     </Text>
                     <TouchableOpacity
                         style={styles.joinBtn}
-                        onPress={onJoin}
+                        // ✅ passes selected plan to parent
+                        onPress={() => onJoin(selectedPlan)}
                         activeOpacity={0.85}
                     >
                         <Text style={styles.joinBtnText}>Create My Account →</Text>
@@ -276,9 +270,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff8f3',
     },
-    scrollContent: {
-        // paddingBottom set dynamically via insets above
-    },
+    scrollContent: {},
 
     progressBar: {
         flexDirection: 'row',
