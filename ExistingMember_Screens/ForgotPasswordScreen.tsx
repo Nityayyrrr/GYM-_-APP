@@ -9,13 +9,15 @@ import {
     Platform,
     ScrollView,
     Animated,
+    Dimensions,
+    Modal,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, styles as shared } from '../styles';
-import TopBar from '../components/TopBar';
+import { forgotPassword, verifyOTP, resetPassword } from '../api';
 
-// ─── Steps ───────────────────────────────────────────────────────────────────
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 type Step = 'mobile' | 'otp' | 'newPassword' | 'done';
 
 export default function ForgotPasswordScreen({
@@ -28,7 +30,6 @@ export default function ForgotPasswordScreen({
     const insets = useSafeAreaInsets();
     const [step, setStep] = useState<Step>('mobile');
 
-    // Field values
     const [mobile, setMobile] = useState('');
     const [otp, setOtp] = useState(['', '', '', '', '', '']);
     const [newPass, setNewPass] = useState('');
@@ -38,15 +39,11 @@ export default function ForgotPasswordScreen({
     const [resendTimer, setResendTimer] = useState(30);
     const [canResend, setCanResend] = useState(false);
 
-    // OTP input refs
     const otpRefs = useRef<(TextInput | null)[]>([]);
 
-    // Entry animations (re-run on step change)
-    const heroAnim = useRef(new Animated.Value(0)).current;
-    const cardAnim = useRef(new Animated.Value(0)).current;
-    const field1Anim = useRef(new Animated.Value(0)).current;
-    const field2Anim = useRef(new Animated.Value(0)).current;
-    const btnAnim = useRef(new Animated.Value(0)).current;
+    // Bottom sheet animation
+    const sheetAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+    const backdropAnim = useRef(new Animated.Value(0)).current;
 
     // Success overlay
     const overlayOpacity = useRef(new Animated.Value(0)).current;
@@ -54,17 +51,38 @@ export default function ForgotPasswordScreen({
     const checkOpacity = useRef(new Animated.Value(0)).current;
     const successTextOpacity = useRef(new Animated.Value(0)).current;
 
-    // Re-animate on step change
+    // Slide up on mount
     useEffect(() => {
-        [heroAnim, cardAnim, field1Anim, field2Anim, btnAnim].forEach((a) => a.setValue(0));
-        Animated.stagger(90, [
-            Animated.spring(heroAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }),
-            Animated.spring(cardAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }),
-            Animated.spring(field1Anim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }),
-            Animated.spring(field2Anim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }),
-            Animated.spring(btnAnim, { toValue: 1, useNativeDriver: true, tension: 70, friction: 10 }),
+        Animated.parallel([
+            Animated.spring(sheetAnim, {
+                toValue: 0,
+                tension: 65,
+                friction: 11,
+                useNativeDriver: true,
+            }),
+            Animated.timing(backdropAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true,
+            }),
         ]).start();
-    }, [step]);
+    }, []);
+
+    // Slide down and close
+    const handleClose = () => {
+        Animated.parallel([
+            Animated.timing(sheetAnim, {
+                toValue: SCREEN_HEIGHT,
+                duration: 280,
+                useNativeDriver: true,
+            }),
+            Animated.timing(backdropAnim, {
+                toValue: 0,
+                duration: 280,
+                useNativeDriver: true,
+            }),
+        ]).start(() => onBack());
+    };
 
     // Resend countdown
     useEffect(() => {
@@ -73,42 +91,30 @@ export default function ForgotPasswordScreen({
         setCanResend(false);
         const interval = setInterval(() => {
             setResendTimer((t) => {
-                if (t <= 1) {
-                    clearInterval(interval);
-                    setCanResend(true);
-                    return 0;
-                }
+                if (t <= 1) { clearInterval(interval); setCanResend(true); return 0; }
                 return t - 1;
             });
         }, 1000);
         return () => clearInterval(interval);
     }, [step]);
 
-    const animStyle = (anim: Animated.Value) => ({
-        opacity: anim,
-        transform: [
-            {
-                translateY: anim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [24, 0],
-                }),
-            },
-        ],
-    });
-
     // ── Handlers ────────────────────────────────────────────────────────────────
 
-    const handleSendOtp = () => {
+    const handleSendOtp = async () => {
         if (mobile.replace(/\D/g, '').length < 10) {
             setError('Please enter a valid 10-digit mobile number.');
             return;
         }
         setError('');
         setLoading(true);
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            await forgotPassword(mobile);
             setStep('otp');
-        }, 1200);
+        } catch (e: any) {
+            setError(e.message || 'Failed to send OTP. Try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleOtpChange = (value: string, index: number) => {
@@ -116,70 +122,60 @@ export default function ForgotPasswordScreen({
         const next = [...otp];
         next[index] = cleaned;
         setOtp(next);
-        if (cleaned && index < 5) {
-            otpRefs.current[index + 1]?.focus();
-        }
-        if (!cleaned && index > 0) {
-            otpRefs.current[index - 1]?.focus();
-        }
+        if (cleaned && index < 5) otpRefs.current[index + 1]?.focus();
+        if (!cleaned && index > 0) otpRefs.current[index - 1]?.focus();
     };
 
-    const handleVerifyOtp = () => {
+    const handleVerifyOtp = async () => {
         if (otp.join('').length < 6) {
             setError('Please enter the 6-digit OTP.');
             return;
         }
         setError('');
         setLoading(true);
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            await verifyOTP(mobile, otp.join(''));
             setStep('newPassword');
-        }, 1200);
+        } catch (e: any) {
+            setError(e.message || 'Invalid OTP. Try again.');
+        } finally {
+            setLoading(false);
+        }
     };
 
-    const handleResetPassword = () => {
-        if (!newPass || !confirmPass) {
-            setError('Please fill in both fields.');
-            return;
-        }
-        if (newPass.length < 8) {
-            setError('Password must be at least 8 characters.');
-            return;
-        }
-        if (newPass !== confirmPass) {
-            setError('Passwords do not match.');
-            return;
-        }
+    const handleResetPassword = async () => {
+        if (!newPass || !confirmPass) { setError('Please fill in both fields.'); return; }
+        if (newPass.length < 8) { setError('Password must be at least 8 characters.'); return; }
+        if (newPass !== confirmPass) { setError('Passwords do not match.'); return; }
+        if (!/[A-Z]/.test(newPass)) { setError('Must contain an uppercase letter.'); return; }
+        if (!/[a-z]/.test(newPass)) { setError('Must contain a lowercase letter.'); return; }
+        if (!/\d/.test(newPass)) { setError('Must contain a number.'); return; }
+        if (!/[!@#$%^&*]/.test(newPass)) { setError('Must contain a special character (!@#$%^&*).'); return; }
+
         setError('');
         setLoading(true);
-        setTimeout(() => {
-            setLoading(false);
+        try {
+            await resetPassword(mobile, newPass);
             triggerSuccessAnimation();
-        }, 1200);
+        } catch (e: any) {
+            setError(e.message || 'Failed to reset password.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const triggerSuccessAnimation = () => {
-        Animated.timing(overlayOpacity, {
-            toValue: 1,
-            duration: 350,
-            useNativeDriver: true,
-        }).start(() => {
-            Animated.parallel([
-                Animated.spring(checkScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
-                Animated.timing(checkOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-            ]).start(() => {
-                Animated.timing(successTextOpacity, {
-                    toValue: 1,
-                    duration: 300,
-                    useNativeDriver: true,
-                }).start(() => {
-                    setTimeout(() => onSuccess(), 900);
+        Animated.timing(overlayOpacity, { toValue: 1, duration: 350, useNativeDriver: true })
+            .start(() => {
+                Animated.parallel([
+                    Animated.spring(checkScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
+                    Animated.timing(checkOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+                ]).start(() => {
+                    Animated.timing(successTextOpacity, { toValue: 1, duration: 300, useNativeDriver: true })
+                        .start(() => { setTimeout(() => onSuccess(), 900); });
                 });
             });
-        });
     };
-
-    // ── Step content ─────────────────────────────────────────────────────────────
 
     const stepMeta: Record<Step, { capsLabel: string; title: string }> = {
         mobile: { capsLabel: 'Account Recovery', title: 'Forgot Your\nPassword?' },
@@ -188,328 +184,317 @@ export default function ForgotPasswordScreen({
         done: { capsLabel: '', title: '' },
     };
 
-    const currentMeta = stepMeta[step];
-
-    // ── Render ───────────────────────────────────────────────────────────────────
-
     return (
-        <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-            <StatusBar style="dark" translucent={false} backgroundColor="#fff8f3" />
-            <TopBar onBack={onBack} title="Forgot Password" />
-            <View style={styles.divider} />
+        <Modal transparent animationType="none" visible onRequestClose={handleClose}>
 
-            {/* Step indicator */}
-            <View style={styles.stepBar}>
-                {(['mobile', 'otp', 'newPassword'] as Step[]).map((s, i) => {
-                    const steps: Step[] = ['mobile', 'otp', 'newPassword'];
-                    const currentIdx = steps.indexOf(step);
-                    const isComplete = i < currentIdx;
-                    const isActive = s === step;
-                    return (
-                        <View key={s} style={styles.stepItem}>
-                            <View
-                                style={[
+            {/* Backdrop */}
+            <Animated.View
+                style={[styles.backdrop, { opacity: backdropAnim }]}
+            >
+                <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={handleClose} />
+            </Animated.View>
+
+            {/* Bottom Sheet */}
+            <Animated.View
+                style={[
+                    styles.sheet,
+                    { paddingBottom: insets.bottom + 16 },
+                    { transform: [{ translateY: sheetAnim }] },
+                ]}
+            >
+                {/* Handle bar */}
+                <View style={styles.handleBar} />
+
+                {/* Header row */}
+                <View style={styles.sheetHeader}>
+                    <View>
+                        <Text style={styles.capsLabel}>{stepMeta[step].capsLabel}</Text>
+                        <Text style={styles.sheetTitle}>{stepMeta[step].title}</Text>
+                    </View>
+                    <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+                        <Text style={styles.closeBtnText}>✕</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* Subtitle */}
+                {step === 'mobile' && (
+                    <Text style={styles.subtitle}>
+                        Enter your registered mobile number and we'll send you a one-time password.
+                    </Text>
+                )}
+                {step === 'otp' && (
+                    <Text style={styles.subtitle}>
+                        A 6-digit OTP was sent to{' '}
+                        <Text style={styles.highlight}>+91 {mobile}</Text>
+                    </Text>
+                )}
+                {step === 'newPassword' && (
+                    <Text style={styles.subtitle}>
+                        Choose a strong password you haven't used before.
+                    </Text>
+                )}
+
+                {/* Step indicator */}
+                <View style={styles.stepBar}>
+                    {(['mobile', 'otp', 'newPassword'] as Step[]).map((s, i) => {
+                        const steps: Step[] = ['mobile', 'otp', 'newPassword'];
+                        const currentIdx = steps.indexOf(step);
+                        const isComplete = i < currentIdx;
+                        const isActive = s === step;
+                        return (
+                            <View key={s} style={styles.stepItem}>
+                                <View style={[
                                     styles.stepDot,
                                     isActive && styles.stepDotActive,
                                     isComplete && styles.stepDotComplete,
-                                ]}
-                            >
-                                {isComplete ? (
-                                    <Text style={styles.stepDotTick}>✓</Text>
-                                ) : (
-                                    <Text
-                                        style={[
-                                            styles.stepDotNum,
-                                            (isActive || isComplete) && { color: '#fff' },
-                                        ]}
-                                    >
-                                        {i + 1}
-                                    </Text>
-                                )}
+                                ]}>
+                                    {isComplete
+                                        ? <Text style={styles.stepDotTick}>✓</Text>
+                                        : <Text style={[styles.stepDotNum, (isActive || isComplete) && { color: '#fff' }]}>{i + 1}</Text>
+                                    }
+                                </View>
+                                {i < 2 && <View style={[styles.stepLine, isComplete && styles.stepLineComplete]} />}
                             </View>
-                            {i < 2 && (
-                                <View
-                                    style={[styles.stepLine, isComplete && styles.stepLineComplete]}
-                                />
-                            )}
-                        </View>
-                    );
-                })}
-            </View>
+                        );
+                    })}
+                </View>
 
-            <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 56 : 0}
-            >
-                <ScrollView
-                    contentContainerStyle={[
-                        styles.formContent,
-                        { paddingBottom: insets.bottom + 48 },
-                    ]}
-                    keyboardShouldPersistTaps="handled"
-                    showsVerticalScrollIndicator={false}
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    keyboardVerticalOffset={Platform.OS === 'ios' ? 20 : 0}
                 >
-                    {/* Hero */}
-                    <Animated.View style={[styles.formHero, animStyle(heroAnim)]}>
-                        <Text style={shared.capsLabel}>{currentMeta.capsLabel}</Text>
-                        <Text style={styles.formTitle}>{currentMeta.title}</Text>
-                        {step === 'mobile' && (
-                            <Text style={styles.formSubtitle}>
-                                Enter your registered mobile number and we'll send you a one-time password.
-                            </Text>
-                        )}
-                        {step === 'otp' && (
-                            <Text style={styles.formSubtitle}>
-                                A 6-digit OTP was sent to{' '}
-                                <Text style={styles.highlight}>+91 {mobile}</Text>
-                            </Text>
-                        )}
-                        {step === 'newPassword' && (
-                            <Text style={styles.formSubtitle}>
-                                Choose a strong password you haven't used before.
-                            </Text>
-                        )}
-                    </Animated.View>
-
-                    {/* ── Card ── */}
-                    <Animated.View style={[styles.formCard, animStyle(cardAnim)]}>
-
+                    <ScrollView
+                        keyboardShouldPersistTaps="handled"
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.scrollContent}
+                    >
                         {/* STEP 1: Mobile */}
                         {step === 'mobile' && (
-                            <>
-                                <Animated.View style={[styles.fieldGroup, animStyle(field1Anim)]}>
-                                    <Text style={styles.fieldLabel}>Mobile Number</Text>
-                                    <View style={styles.mobileRow}>
-                                        <View style={styles.dialCode}>
-                                            <Text style={styles.dialCodeText}>🇮🇳  +91</Text>
-                                        </View>
-                                        <TextInput
-                                            style={[styles.input, styles.mobileInput]}
-                                            placeholder="98765 43210"
-                                            placeholderTextColor={C.onSurfaceVariant}
-                                            value={mobile}
-                                            onChangeText={(t) => setMobile(t.replace(/[^0-9]/g, ''))}
-                                            keyboardType="phone-pad"
-                                            maxLength={10}
-                                            returnKeyType="done"
-                                            onSubmitEditing={handleSendOtp}
-                                        />
+                            <View style={styles.fieldSection}>
+                                <Text style={styles.fieldLabel}>Mobile Number</Text>
+                                <View style={styles.mobileRow}>
+                                    <View style={styles.dialCode}>
+                                        <Text style={styles.dialCodeText}>🇮🇳  +91</Text>
                                     </View>
-                                </Animated.View>
-
-                                {error ? (
-                                    <View style={styles.errorBanner}>
-                                        <Text style={styles.errorText}>{error}</Text>
-                                    </View>
-                                ) : null}
-
-                                <Animated.View style={animStyle(btnAnim)}>
-                                    <TouchableOpacity
-                                        style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
-                                        activeOpacity={0.85}
-                                        onPress={handleSendOtp}
-                                        disabled={loading}
-                                    >
-                                        <Text style={shared.primaryBtnTitle}>
-                                            {loading ? 'Sending OTP…' : 'Send OTP'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </Animated.View>
-                            </>
+                                    <TextInput
+                                        style={[styles.input, styles.mobileInput]}
+                                        placeholder="98765 43210"
+                                        placeholderTextColor={C.onSurfaceVariant}
+                                        value={mobile}
+                                        onChangeText={(t) => setMobile(t.replace(/[^0-9]/g, ''))}
+                                        keyboardType="phone-pad"
+                                        maxLength={10}
+                                        returnKeyType="done"
+                                        onSubmitEditing={handleSendOtp}
+                                        autoFocus
+                                    />
+                                </View>
+                                {error ? <View style={styles.errorBanner}><Text style={styles.errorText}>{error}</Text></View> : null}
+                                <TouchableOpacity
+                                    style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
+                                    activeOpacity={0.85}
+                                    onPress={handleSendOtp}
+                                    disabled={loading}
+                                >
+                                    <Text style={shared.primaryBtnTitle}>{loading ? 'Sending OTP…' : 'Send OTP'}</Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
 
                         {/* STEP 2: OTP */}
                         {step === 'otp' && (
-                            <>
-                                <Animated.View style={[styles.fieldGroup, animStyle(field1Anim)]}>
-                                    <Text style={styles.fieldLabel}>One-Time Password</Text>
-                                    <View style={styles.otpRow}>
-                                        {otp.map((digit, i) => (
-                                            <TextInput
-                                                key={i}
-                                                ref={(r) => { otpRefs.current[i] = r; }}
-                                                style={[
-                                                    styles.otpBox,
-                                                    digit.length > 0 && styles.otpBoxFilled,
-                                                ]}
-                                                value={digit}
-                                                onChangeText={(v) => handleOtpChange(v, i)}
-                                                keyboardType="number-pad"
-                                                maxLength={1}
-                                                textAlign="center"
-                                                selectTextOnFocus
-                                            />
-                                        ))}
-                                    </View>
-                                </Animated.View>
+                            <View style={styles.fieldSection}>
+                                <Text style={styles.fieldLabel}>One-Time Password</Text>
+                                <View style={styles.otpRow}>
+                                    {otp.map((digit, i) => (
+                                        <TextInput
+                                            key={i}
+                                            ref={(r) => { otpRefs.current[i] = r; }}
+                                            style={[styles.otpBox, digit.length > 0 && styles.otpBoxFilled]}
+                                            value={digit}
+                                            onChangeText={(v) => handleOtpChange(v, i)}
+                                            keyboardType="number-pad"
+                                            maxLength={1}
+                                            textAlign="center"
+                                            selectTextOnFocus
+                                        />
+                                    ))}
+                                </View>
 
-                                {/* Resend */}
-                                <Animated.View style={[styles.resendRow, animStyle(field2Anim)]}>
+                                <View style={styles.resendRow}>
                                     {canResend ? (
-                                        <TouchableOpacity
-                                            onPress={() => {
-                                                setOtp(['', '', '', '', '', '']);
-                                                setStep('otp'); // re-triggers timer via useEffect
-                                            }}
-                                        >
+                                        <TouchableOpacity onPress={() => { setOtp(['', '', '', '', '', '']); setStep('otp'); }}>
                                             <Text style={styles.resendActive}>Resend OTP</Text>
                                         </TouchableOpacity>
                                     ) : (
                                         <Text style={styles.resendTimer}>
-                                            Resend in{' '}
-                                            <Text style={styles.resendTimerBold}>{resendTimer}s</Text>
+                                            Resend in <Text style={styles.resendTimerBold}>{resendTimer}s</Text>
                                         </Text>
                                     )}
                                     <TouchableOpacity onPress={() => { setError(''); setStep('mobile'); }}>
                                         <Text style={styles.changeNumber}>Change Number</Text>
                                     </TouchableOpacity>
-                                </Animated.View>
+                                </View>
 
-                                {error ? (
-                                    <View style={styles.errorBanner}>
-                                        <Text style={styles.errorText}>{error}</Text>
-                                    </View>
-                                ) : null}
+                                {error ? <View style={styles.errorBanner}><Text style={styles.errorText}>{error}</Text></View> : null}
 
-                                <Animated.View style={animStyle(btnAnim)}>
-                                    <TouchableOpacity
-                                        style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
-                                        activeOpacity={0.85}
-                                        onPress={handleVerifyOtp}
-                                        disabled={loading}
-                                    >
-                                        <Text style={shared.primaryBtnTitle}>
-                                            {loading ? 'Verifying…' : 'Verify OTP'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </Animated.View>
-                            </>
+                                <TouchableOpacity
+                                    style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
+                                    activeOpacity={0.85}
+                                    onPress={handleVerifyOtp}
+                                    disabled={loading}
+                                >
+                                    <Text style={shared.primaryBtnTitle}>{loading ? 'Verifying…' : 'Verify OTP'}</Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
 
                         {/* STEP 3: New Password */}
                         {step === 'newPassword' && (
-                            <>
-                                <Animated.View style={[styles.fieldGroup, animStyle(field1Anim)]}>
-                                    <Text style={styles.fieldLabel}>New Password</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Min. 8 characters"
-                                        placeholderTextColor={C.onSurfaceVariant}
-                                        value={newPass}
-                                        onChangeText={setNewPass}
-                                        secureTextEntry
-                                        returnKeyType="next"
-                                    />
-                                </Animated.View>
+                            <View style={styles.fieldSection}>
+                                <Text style={styles.fieldLabel}>New Password</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Min. 8 chars, A-Z, 0-9, !@#$"
+                                    placeholderTextColor={C.onSurfaceVariant}
+                                    value={newPass}
+                                    onChangeText={setNewPass}
+                                    secureTextEntry
+                                    returnKeyType="next"
+                                />
 
-                                <Animated.View style={[styles.fieldGroup, animStyle(field2Anim)]}>
-                                    <Text style={styles.fieldLabel}>Confirm Password</Text>
-                                    <TextInput
-                                        style={styles.input}
-                                        placeholder="Re-enter new password"
-                                        placeholderTextColor={C.onSurfaceVariant}
-                                        value={confirmPass}
-                                        onChangeText={setConfirmPass}
-                                        secureTextEntry
-                                        returnKeyType="done"
-                                        onSubmitEditing={handleResetPassword}
-                                    />
-                                </Animated.View>
+                                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Confirm Password</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Re-enter new password"
+                                    placeholderTextColor={C.onSurfaceVariant}
+                                    value={confirmPass}
+                                    onChangeText={setConfirmPass}
+                                    secureTextEntry
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleResetPassword}
+                                />
 
-                                {/* Password strength hint */}
                                 {newPass.length > 0 && (
                                     <View style={styles.strengthRow}>
                                         {[8, 12, 16].map((threshold, i) => (
-                                            <View
-                                                key={i}
-                                                style={[
-                                                    styles.strengthBar,
-                                                    newPass.length >= threshold && styles.strengthBarFilled,
-                                                ]}
-                                            />
+                                            <View key={i} style={[styles.strengthBar, newPass.length >= threshold && styles.strengthBarFilled]} />
                                         ))}
                                         <Text style={styles.strengthLabel}>
-                                            {newPass.length < 8
-                                                ? 'Too short'
-                                                : newPass.length < 12
-                                                    ? 'Fair'
-                                                    : newPass.length < 16
-                                                        ? 'Good'
-                                                        : 'Strong'}
+                                            {newPass.length < 8 ? 'Too short' : newPass.length < 12 ? 'Fair' : newPass.length < 16 ? 'Good' : 'Strong'}
                                         </Text>
                                     </View>
                                 )}
 
-                                {error ? (
-                                    <View style={styles.errorBanner}>
-                                        <Text style={styles.errorText}>{error}</Text>
-                                    </View>
-                                ) : null}
+                                {error ? <View style={styles.errorBanner}><Text style={styles.errorText}>{error}</Text></View> : null}
 
-                                <Animated.View style={animStyle(btnAnim)}>
-                                    <TouchableOpacity
-                                        style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
-                                        activeOpacity={0.85}
-                                        onPress={handleResetPassword}
-                                        disabled={loading}
-                                    >
-                                        <Text style={shared.primaryBtnTitle}>
-                                            {loading ? 'Updating…' : 'Reset Password'}
-                                        </Text>
-                                    </TouchableOpacity>
-                                </Animated.View>
-                            </>
+                                <TouchableOpacity
+                                    style={[shared.primaryBtn, loading && { opacity: 0.7 }]}
+                                    activeOpacity={0.85}
+                                    onPress={handleResetPassword}
+                                    disabled={loading}
+                                >
+                                    <Text style={shared.primaryBtnTitle}>{loading ? 'Updating…' : 'Reset Password'}</Text>
+                                </TouchableOpacity>
+                            </View>
                         )}
-                    </Animated.View>
-                </ScrollView>
-            </KeyboardAvoidingView>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </Animated.View>
 
-            {/* ── Success Overlay ── */}
-            <Animated.View
-                style={[styles.successOverlay, { opacity: overlayOpacity }]}
-                pointerEvents="none"
-            >
-                <Animated.View
-                    style={[
-                        styles.successIconWrap,
-                        { opacity: checkOpacity, transform: [{ scale: checkScale }] },
-                    ]}
-                >
+            {/* Success Overlay */}
+            <Animated.View style={[styles.successOverlay, { opacity: overlayOpacity }]} pointerEvents="none">
+                <Animated.View style={[styles.successIconWrap, { opacity: checkOpacity, transform: [{ scale: checkScale }] }]}>
                     <View style={styles.checkCircle}>
                         <View style={styles.checkStem} />
                         <View style={styles.checkKick} />
                     </View>
                 </Animated.View>
-                <Animated.Text style={[styles.successLabel, { opacity: successTextOpacity }]}>
-                    Password Reset!
-                </Animated.Text>
-                <Animated.Text style={[styles.successSub, { opacity: successTextOpacity }]}>
-                    You can now sign in with your new password
-                </Animated.Text>
+                <Animated.Text style={[styles.successLabel, { opacity: successTextOpacity }]}>Password Reset!</Animated.Text>
+                <Animated.Text style={[styles.successSub, { opacity: successTextOpacity }]}>You can now sign in with your new password</Animated.Text>
             </Animated.View>
-        </SafeAreaView>
+        </Modal>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
+    backdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    sheet: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         backgroundColor: '#fff8f3',
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        paddingHorizontal: 24,
+        paddingTop: 12,
+        maxHeight: SCREEN_HEIGHT * 0.92,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
+        elevation: 20,
     },
-    divider: {
-        height: 1,
+    handleBar: {
+        width: 40,
+        height: 4,
+        borderRadius: 2,
         backgroundColor: C.outline,
-        opacity: 0.4,
+        alignSelf: 'center',
+        marginBottom: 16,
     },
-
-    // ── Step indicator ──────────────────────────────────────────────────────────
+    sheetHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    capsLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 2,
+        color: C.primary,
+        textTransform: 'uppercase',
+        marginBottom: 4,
+    },
+    sheetTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: C.onSurface,
+        letterSpacing: -0.5,
+        lineHeight: 30,
+    },
+    closeBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: C.surfaceVariant,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    closeBtnText: {
+        fontSize: 14,
+        color: C.onSurfaceVariant,
+        fontWeight: '600',
+    },
+    subtitle: {
+        fontSize: 13,
+        color: C.onSurfaceVariant,
+        lineHeight: 20,
+        marginBottom: 16,
+    },
+    highlight: {
+        color: C.primary,
+        fontWeight: '600',
+    },
     stepBar: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 32,
-        paddingVertical: 16,
-        backgroundColor: '#fff8f3',
+        marginBottom: 20,
     },
     stepItem: {
         flexDirection: 'row',
@@ -517,83 +502,23 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     stepDot: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
         borderWidth: 1.5,
         borderColor: C.outline,
         backgroundColor: '#fff',
         alignItems: 'center',
         justifyContent: 'center',
     },
-    stepDotActive: {
-        backgroundColor: C.primary ?? '#800000',
-        borderColor: C.primary ?? '#800000',
-    },
-    stepDotComplete: {
-        backgroundColor: '#2e7d32',
-        borderColor: '#2e7d32',
-    },
-    stepDotNum: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: C.onSurfaceVariant,
-    },
-    stepDotTick: {
-        fontSize: 12,
-        fontWeight: '800',
-        color: '#fff',
-    },
-    stepLine: {
-        flex: 1,
-        height: 1.5,
-        backgroundColor: C.outline,
-        marginHorizontal: 4,
-    },
-    stepLineComplete: {
-        backgroundColor: '#2e7d32',
-    },
-
-    // ── Form layout ─────────────────────────────────────────────────────────────
-    formContent: {
-        paddingHorizontal: 24,
-        paddingTop: 12,
-    },
-    formHero: {
-        marginBottom: 20,
-        gap: 8,
-    },
-    formTitle: {
-        fontSize: 28,
-        fontWeight: '800',
-        color: C.onSurface,
-        letterSpacing: -0.5,
-        lineHeight: 34,
-    },
-    formSubtitle: {
-        fontSize: 14,
-        color: C.onSurfaceVariant,
-        lineHeight: 20,
-        fontWeight: '400',
-    },
-    highlight: {
-        color: C.primary ?? '#800000',
-        fontWeight: '600',
-    },
-    formCard: {
-        backgroundColor: C.surface,
-        borderRadius: 16,
-        borderWidth: 0.5,
-        borderColor: C.outline,
-        padding: 20,
-        gap: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    fieldGroup: { gap: 6 },
+    stepDotActive: { backgroundColor: C.primary, borderColor: C.primary },
+    stepDotComplete: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
+    stepDotNum: { fontSize: 11, fontWeight: '700', color: C.onSurfaceVariant },
+    stepDotTick: { fontSize: 11, fontWeight: '800', color: '#fff' },
+    stepLine: { flex: 1, height: 1.5, backgroundColor: C.outline, marginHorizontal: 4 },
+    stepLineComplete: { backgroundColor: '#2e7d32' },
+    scrollContent: { paddingBottom: 16 },
+    fieldSection: { gap: 12 },
     fieldLabel: {
         fontSize: 11,
         fontWeight: '700',
@@ -601,11 +526,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.8,
         textTransform: 'uppercase',
     },
-    mobileRow: {
-        flexDirection: 'row',
-        gap: 8,
-        alignItems: 'center',
-    },
+    mobileRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
     dialCode: {
         borderWidth: 1,
         borderColor: C.outline,
@@ -615,11 +536,7 @@ const styles = StyleSheet.create({
         backgroundColor: C.surfaceVariant,
         justifyContent: 'center',
     },
-    dialCodeText: {
-        fontSize: 14,
-        color: C.onSurface,
-        fontWeight: '600',
-    },
+    dialCodeText: { fontSize: 14, color: C.onSurface, fontWeight: '600' },
     mobileInput: { flex: 1 },
     input: {
         borderWidth: 1,
@@ -631,23 +548,9 @@ const styles = StyleSheet.create({
         color: C.onSurface,
         backgroundColor: C.surfaceVariant,
     },
-    errorBanner: {
-        backgroundColor: '#ffdad4',
-        borderRadius: 8,
-        padding: 12,
-    },
-    errorText: {
-        fontSize: 13,
-        color: '#8f0f07',
-        fontWeight: '500',
-    },
-
-    // ── OTP boxes ───────────────────────────────────────────────────────────────
-    otpRow: {
-        flexDirection: 'row',
-        gap: 8,
-        justifyContent: 'space-between',
-    },
+    errorBanner: { backgroundColor: '#ffdad4', borderRadius: 8, padding: 12 },
+    errorText: { fontSize: 13, color: '#8f0f07', fontWeight: '500' },
+    otpRow: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
     otpBox: {
         flex: 1,
         aspectRatio: 0.9,
@@ -659,62 +562,16 @@ const styles = StyleSheet.create({
         color: C.onSurface,
         backgroundColor: C.surfaceVariant,
     },
-    otpBoxFilled: {
-        borderColor: C.primary ?? '#800000',
-        backgroundColor: '#fff',
-    },
-
-    // ── Resend row ───────────────────────────────────────────────────────────────
-    resendRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginTop: -4,
-    },
-    resendTimer: {
-        fontSize: 13,
-        color: C.onSurfaceVariant,
-    },
-    resendTimerBold: {
-        fontWeight: '700',
-        color: C.onSurface,
-    },
-    resendActive: {
-        fontSize: 13,
-        color: C.primary ?? '#800000',
-        fontWeight: '700',
-    },
-    changeNumber: {
-        fontSize: 13,
-        color: C.primary ?? '#800000',
-        fontWeight: '600',
-    },
-
-    // ── Password strength ────────────────────────────────────────────────────────
-    strengthRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        marginTop: -4,
-    },
-    strengthBar: {
-        flex: 1,
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: C.outline,
-    },
-    strengthBarFilled: {
-        backgroundColor: C.primary ?? '#800000',
-    },
-    strengthLabel: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: C.onSurfaceVariant,
-        width: 48,
-        textAlign: 'right',
-    },
-
-    // ── Success overlay ──────────────────────────────────────────────────────────
+    otpBoxFilled: { borderColor: C.primary, backgroundColor: '#fff' },
+    resendRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    resendTimer: { fontSize: 13, color: C.onSurfaceVariant },
+    resendTimerBold: { fontWeight: '700', color: C.onSurface },
+    resendActive: { fontSize: 13, color: C.primary, fontWeight: '700' },
+    changeNumber: { fontSize: 13, color: C.primary, fontWeight: '600' },
+    strengthRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    strengthBar: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.outline },
+    strengthBarFilled: { backgroundColor: C.primary },
+    strengthLabel: { fontSize: 11, fontWeight: '600', color: C.onSurfaceVariant, width: 48, textAlign: 'right' },
     successOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: '#fff8f3',
@@ -724,45 +581,18 @@ const styles = StyleSheet.create({
     },
     successIconWrap: { marginBottom: 8 },
     checkCircle: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        backgroundColor: C.primary ?? '#800000',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
+        width: 80, height: 80, borderRadius: 40,
+        backgroundColor: C.primary,
+        alignItems: 'center', justifyContent: 'center', position: 'relative',
     },
     checkStem: {
-        position: 'absolute',
-        width: 4,
-        height: 22,
-        backgroundColor: '#fff',
-        borderRadius: 2,
-        bottom: 22,
-        left: 30,
-        transform: [{ rotate: '45deg' }],
+        position: 'absolute', width: 4, height: 22, backgroundColor: '#fff',
+        borderRadius: 2, bottom: 22, left: 30, transform: [{ rotate: '45deg' }],
     },
     checkKick: {
-        position: 'absolute',
-        width: 4,
-        height: 36,
-        backgroundColor: '#fff',
-        borderRadius: 2,
-        bottom: 20,
-        left: 40,
-        transform: [{ rotate: '-45deg' }],
+        position: 'absolute', width: 4, height: 36, backgroundColor: '#fff',
+        borderRadius: 2, bottom: 20, left: 40, transform: [{ rotate: '-45deg' }],
     },
-    successLabel: {
-        fontSize: 26,
-        fontWeight: '800',
-        color: C.onSurface,
-        letterSpacing: -0.4,
-    },
-    successSub: {
-        fontSize: 15,
-        color: C.onSurfaceVariant,
-        fontWeight: '500',
-        textAlign: 'center',
-        paddingHorizontal: 32,
-    },
+    successLabel: { fontSize: 26, fontWeight: '800', color: C.onSurface, letterSpacing: -0.4 },
+    successSub: { fontSize: 15, color: C.onSurfaceVariant, fontWeight: '500', textAlign: 'center', paddingHorizontal: 32 },
 });

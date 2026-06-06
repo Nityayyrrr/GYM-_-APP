@@ -12,11 +12,13 @@ import {
   Dimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-// ✅ Use react-native-safe-area-context — NOT react-native's SafeAreaView
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, styles as shared } from '../styles';
 import TopBar from '../components/TopBar';
 import ForgotPasswordScreen from './ForgotPasswordScreen';
+import SplashScreen from '../SplashScreen';
+import { loginUser } from '../api';
+import { setToken } from '../auth';
 
 const { width, height } = Dimensions.get('window');
 
@@ -33,21 +35,14 @@ export default function LoginScreen({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ── Forgot password overlay state ──
   const [showForgot, setShowForgot] = useState(false);
+  const [showPostLoginSplash, setShowPostLoginSplash] = useState(false); // ← new state
 
-  // Entry animations
   const heroAnim = useRef(new Animated.Value(0)).current;
   const cardAnim = useRef(new Animated.Value(0)).current;
   const field1Anim = useRef(new Animated.Value(0)).current;
   const field2Anim = useRef(new Animated.Value(0)).current;
   const btnAnim = useRef(new Animated.Value(0)).current;
-
-  // Success overlay animations
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const checkScale = useRef(new Animated.Value(0)).current;
-  const checkOpacity = useRef(new Animated.Value(0)).current;
-  const successTextOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.stagger(90, [
@@ -71,28 +66,7 @@ export default function LoginScreen({
     ],
   });
 
-  const triggerSuccessAnimation = () => {
-    Animated.timing(overlayOpacity, {
-      toValue: 1,
-      duration: 350,
-      useNativeDriver: true,
-    }).start(() => {
-      Animated.parallel([
-        Animated.spring(checkScale, { toValue: 1, tension: 60, friction: 7, useNativeDriver: true }),
-        Animated.timing(checkOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
-      ]).start(() => {
-        Animated.timing(successTextOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start(() => {
-          setTimeout(() => onSuccess(), 700);
-        });
-      });
-    });
-  };
-
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!mobile || !password) {
       setError('Please fill in all fields.');
       return;
@@ -101,26 +75,36 @@ export default function LoginScreen({
       setError('Please enter a valid mobile number.');
       return;
     }
+
     setError('');
     setLoading(true);
-    setTimeout(() => {
+
+    try {
+      const { token } = await loginUser({
+        phone: mobile,
+        password,
+      });
+      setToken(token);
+      setShowPostLoginSplash(true); // ← show splash instead of calling onSuccess directly
+    } catch (e: any) {
+      setError(e.message || 'Login failed. Please try again.');
+    } finally {
       setLoading(false);
-      triggerSuccessAnimation();
-    }, 1200);
+    }
   };
 
+  // ── Show post-login splash; when it finishes, hand off to the app ──
+  if (showPostLoginSplash) {
+    return <SplashScreen onDone={onSuccess} />;
+  }
+
   return (
-    // ✅ edges={['top','left','right']} — top edge pushes content below
-    //    the status bar / notch automatically on every device
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
 
-      {/* translucent=false keeps the status bar background solid, no bleed */}
       <StatusBar style="dark" translucent={false} backgroundColor="#fff8f3" />
 
-      {/* TopBar is placed AFTER safe area inset — never overlaps status bar */}
       <TopBar onBack={onBack} title="Member Login" />
 
-      {/* Visual separator between TopBar and scrollable content */}
       <View style={styles.divider} />
 
       <KeyboardAvoidingView
@@ -131,22 +115,18 @@ export default function LoginScreen({
         <ScrollView
           contentContainerStyle={[
             styles.formContent,
-            // ✅ Bottom inset so nothing hides behind the home indicator
             { paddingBottom: insets.bottom + 48 },
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Hero */}
           <Animated.View style={[styles.formHero, animStyle(heroAnim)]}>
             <Text style={shared.capsLabel}>Welcome Back</Text>
             <Text style={styles.formTitle}>Access Your{'\n'}Dashboard</Text>
           </Animated.View>
 
-          {/* Card */}
           <Animated.View style={[styles.formCard, animStyle(cardAnim)]}>
 
-            {/* Mobile Number */}
             <Animated.View style={[styles.fieldGroup, animStyle(field1Anim)]}>
               <Text style={styles.fieldLabel}>Mobile Number</Text>
               <View style={styles.mobileRow}>
@@ -166,7 +146,6 @@ export default function LoginScreen({
               </View>
             </Animated.View>
 
-            {/* Password */}
             <Animated.View style={[styles.fieldGroup, animStyle(field2Anim)]}>
               <Text style={styles.fieldLabel}>Password</Text>
               <TextInput
@@ -200,7 +179,6 @@ export default function LoginScreen({
               </TouchableOpacity>
             </Animated.View>
 
-            {/* ✅ Forgot password — opens ForgotPasswordScreen overlay */}
             <TouchableOpacity
               style={styles.forgotLink}
               onPress={() => setShowForgot(true)}
@@ -212,39 +190,10 @@ export default function LoginScreen({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── Success Overlay ── */}
-      <Animated.View
-        style={[styles.successOverlay, { opacity: overlayOpacity }]}
-        pointerEvents="none"
-      >
-        <Animated.View
-          style={[
-            styles.successIconWrap,
-            { opacity: checkOpacity, transform: [{ scale: checkScale }] },
-          ]}
-        >
-          <View style={styles.checkCircle}>
-            <View style={styles.checkStem} />
-            <View style={styles.checkKick} />
-          </View>
-        </Animated.View>
-
-        <Animated.Text style={[styles.successLabel, { opacity: successTextOpacity }]}>
-          Welcome!
-        </Animated.Text>
-        <Animated.Text style={[styles.successSub, { opacity: successTextOpacity }]}>
-          Signed in successfully
-        </Animated.Text>
-      </Animated.View>
-
-      {/* ── Forgot Password Screen Overlay ── */}
       {showForgot && (
         <ForgotPasswordScreen
           onBack={() => setShowForgot(false)}
-          onSuccess={() => {
-            // Dismiss forgot screen; user can now log in with new password
-            setShowForgot(false);
-          }}
+          onSuccess={() => setShowForgot(false)}
         />
       )}
 
@@ -255,7 +204,7 @@ export default function LoginScreen({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff8f3', // matches StatusBar backgroundColor
+    backgroundColor: '#fff8f3',
   },
   divider: {
     height: 1,
@@ -265,7 +214,6 @@ const styles = StyleSheet.create({
   formContent: {
     paddingHorizontal: 24,
     paddingTop: 28,
-    // paddingBottom applied dynamically via insets above
   },
   formHero: {
     marginBottom: 24,
@@ -347,57 +295,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.primary,
     fontWeight: '600',
-  },
-
-  // ── Success overlay ──
-  successOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#fff8f3',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  successIconWrap: {
-    marginBottom: 8,
-  },
-  checkCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: C.primary ?? '#800000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  checkStem: {
-    position: 'absolute',
-    width: 4,
-    height: 22,
-    backgroundColor: '#fff',
-    borderRadius: 2,
-    bottom: 22,
-    left: 30,
-    transform: [{ rotate: '45deg' }],
-  },
-  checkKick: {
-    position: 'absolute',
-    width: 4,
-    height: 36,
-    backgroundColor: '#fff',
-    borderRadius: 2,
-    bottom: 20,
-    left: 40,
-    transform: [{ rotate: '-45deg' }],
-  },
-  successLabel: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: C.onSurface,
-    letterSpacing: -0.4,
-  },
-  successSub: {
-    fontSize: 15,
-    color: C.onSurfaceVariant,
-    fontWeight: '500',
   },
 });

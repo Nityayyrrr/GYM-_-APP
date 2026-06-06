@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { clearToken } from './auth';
+import SplashScreen from './SplashScreen';   // ← NEW
 
 // ─────────────────────────────────────────────────────────────
 // IMPORT SCREENS
@@ -24,7 +26,7 @@ import UpgradePlanScreen from './ExistingMember_Screens/UpgradePlanScreen';
 import GymInfoScreen from './NewMember_Screens/GymInfoScreen';
 import MachineryScreen from './NewMember_Screens/MachineryScreen';
 import PlansScreen from './NewMember_Screens/PlansScreen';
-import SignUpScreen from './NewMember_Screens/SignUpScreen'; // ✅ NEW
+import SignUpScreen from './NewMember_Screens/SignUpScreen';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -281,8 +283,6 @@ const NEW_ORDER: NewMemberTab[] = ['gyminfo', 'machinery', 'plans'];
 
 function NewMemberApp({ onLogout }: { onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<NewMemberTab>('gyminfo');
-
-  // ✅ NEW: signup overlay state — null means hidden, string = pre-selected plan
   const [signupPlan, setSignupPlan] = useState<string | null>(null);
 
   const handleTabPress = (tab: NewMemberTab) => {
@@ -297,13 +297,12 @@ function NewMemberApp({ onLogout }: { onLogout: () => void }) {
     return self < curr ? 'left' : 'right';
   };
 
-  // ✅ SignUpScreen overlays the whole NewMemberApp (no tab bar visible during signup)
   if (signupPlan !== null) {
     return (
       <SignUpScreen
         selectedPlan={signupPlan}
-        onBack={() => setSignupPlan(null)}          // back → return to Plans tab
-        onSuccess={onLogout}                        // success → back to Welcome (or swap to home)
+        onBack={() => setSignupPlan(null)}
+        onSuccess={onLogout}
       />
     );
   }
@@ -322,7 +321,6 @@ function NewMemberApp({ onLogout }: { onLogout: () => void }) {
         <AnimatedTabScreen isActive={activeTab === 'plans'} direction={getDir('plans')}>
           <PlansScreen
             onBack={() => handleTabPress('machinery')}
-            // ✅ receives plan name, opens SignUpScreen as full-screen overlay
             onJoin={(plan) => setSignupPlan(plan)}
           />
         </AnimatedTabScreen>
@@ -343,8 +341,14 @@ function NewMemberApp({ onLogout }: { onLogout: () => void }) {
 // ─────────────────────────────────────────────────────────────
 
 function RootApp() {
+  const [showSplash, setShowSplash] = useState(true);   // ← NEW
   const [appScreen, setAppScreen] = useState<AppScreen>('auth');
   const [authScreen, setAuthScreen] = useState<AuthScreen>('welcome');
+
+  // ── Show splash first ────────────────────────────────────────
+  if (showSplash) {
+    return <SplashScreen onDone={() => setShowSplash(false)} />;
+  }
 
   if (appScreen === 'auth') {
     if (authScreen === 'welcome') {
@@ -368,6 +372,7 @@ function RootApp() {
     return (
       <ExistingMemberApp
         onLogout={() => {
+          clearToken();
           setAuthScreen('welcome');
           setAppScreen('auth');
         }}
@@ -378,6 +383,7 @@ function RootApp() {
   return (
     <NewMemberApp
       onLogout={() => {
+        clearToken();
         setAuthScreen('welcome');
         setAppScreen('auth');
       }}
